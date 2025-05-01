@@ -1,3 +1,7 @@
+
+⚠️ **Heads up!** This project has moved — it’s now being actively maintained over here:  
+👉 [hasansujon786/nvim-navbuddy](https://github.com/hasansujon786/nvim-navbuddy)  
+
 # 🗺️ nvim-navbuddy
 
 A simple popup display that provides breadcrumbs like navigation feature but
