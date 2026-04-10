@@ -8,6 +8,48 @@ local ui = require("nvim-navbuddy.ui")
 
 local ns = vim.api.nvim_create_namespace("nvim-navbuddy")
 
+local function is_right_side()
+	local win_id = vim.api.nvim_get_current_win()
+	local win_pos_x = vim.api.nvim_win_get_position(win_id)[2]
+	local total_width = vim.o.columns
+	return win_pos_x > total_width * 0.4
+end
+
+local function mirror_percent(value)
+	if type(value) ~= "string" then
+		return value
+	end
+
+	local num = value:match("^(%d+)%%$")
+	if not num then
+		return value
+	end
+
+	num = tonumber(num)
+	if not num then
+		return value
+	end
+
+	return string.format("%d%%", 100 - num)
+end
+
+local function get_smart_position(position)
+	local pos = vim.deepcopy(position or {})
+
+	if is_right_side() then
+		pos.col = mirror_percent(pos.col)
+	end
+
+	return pos
+end
+
+local function resolve_position(config)
+	if config.window.smart_position then
+		return get_smart_position(config.window.position)
+	end
+	return config.window.position
+end
+
 local function clear_buffer(buf)
 	vim.api.nvim_win_set_buf(buf.winid, buf.bufnr)
 
@@ -45,22 +87,17 @@ local function fill_buffer(buf, node, config)
 
 	for i, child_node in ipairs(parent.children) do
 		local hl_group = "Navbuddy" .. navic.adapt_lsp_num_to_str(child_node.kind)
-		vim.api.nvim_buf_add_highlight(
-			buf.bufnr,
-			ns,
-			hl_group,
-			i - 1,
-			0,
-			-1
-		)
+		vim.api.nvim_buf_add_highlight(buf.bufnr, ns, hl_group, i - 1, 0, -1)
 		if config.node_markers.enabled then
 			vim.api.nvim_buf_set_extmark(buf.bufnr, ns, i - 1, #lines[i], {
-				virt_text = { {
-					child_node.children ~= nil and config.node_markers.icons.branch
-						or i == cursor_pos[1] and config.node_markers.icons.leaf_selected
-						or config.node_markers.icons.leaf,
-					i == cursor_pos[1] and { "NavbuddyCursorLine", hl_group } or hl_group,
-				} },
+				virt_text = {
+					{
+						child_node.children ~= nil and config.node_markers.icons.branch
+							or i == cursor_pos[1] and config.node_markers.icons.leaf_selected
+							or config.node_markers.icons.leaf,
+						i == cursor_pos[1] and { "NavbuddyCursorLine", hl_group } or hl_group,
+					},
+				},
 				virt_text_pos = "right_align",
 				virt_text_hide = false,
 			})
@@ -104,7 +141,7 @@ function display:new(obj)
 		border = config.window.sections.mid.border or ui.get_border_chars(config.window.border, "mid"),
 		win_options = {
 			winhighlight = "Normal:NavbuddyNormalFloat,FloatBorder:NavbuddyFloatBorder",
-			scrolloff = config.window.scrolloff
+			scrolloff = config.window.scrolloff,
 		},
 		buf_options = {
 			modifiable = false,
@@ -145,7 +182,7 @@ function display:new(obj)
 	local layout = nui_layout(
 		{
 			relative = "editor",
-			position = config.window.position,
+			position = resolve_position(config),
 			size = config.window.size,
 		},
 		nui_layout.Box({
@@ -164,7 +201,7 @@ function display:new(obj)
 		leaving_window_for_reorientation = false,
 		closed = false,
 		-- user_gui_cursor = nil,
-		source_buffer_scrolloff = nil
+		source_buffer_scrolloff = nil,
 	}
 
 	-- Set filetype
@@ -222,7 +259,7 @@ function display:new(obj)
 		buffer = obj.mid.bufnr,
 		callback = function()
 			vim.api.nvim_set_option("guicursor", obj.state.user_gui_cursor)
-		end
+		end,
 	})
 	vim.api.nvim_create_autocmd("CmdlineLeave", {
 		group = augroup,
@@ -236,11 +273,9 @@ function display:new(obj)
 
 	-- Mappings
 	for i, v in pairs(config.mappings) do
-		obj.mid:map("n", i,
-		function()
+		obj.mid:map("n", i, function()
 			v.callback(obj)
-		end,
-		{ nowait=true })
+		end, { nowait = true })
 	end
 
 	-- Display
@@ -303,7 +338,10 @@ function display:focus_range()
 end
 
 function display:reorient(ro_win, reorient_method)
-	vim.api.nvim_win_set_cursor(ro_win, { self.focus_node.name_range["start"].line, self.focus_node.name_range["start"].character })
+	vim.api.nvim_win_set_cursor(
+		ro_win,
+		{ self.focus_node.name_range["start"].line, self.focus_node.name_range["start"].character }
+	)
 
 	self.state.leaving_window_for_reorientation = true
 	vim.api.nvim_set_current_win(ro_win)
@@ -318,8 +356,8 @@ function display:reorient(ro_win, reorient_method)
 			vim.api.nvim_win_set_cursor(ro_win, { mid_line, 0 })
 			vim.api.nvim_command("normal! zz")
 			vim.api.nvim_win_set_cursor(
-			ro_win,
-			{ self.focus_node.name_range["start"].line, self.focus_node.name_range["start"].character }
+				ro_win,
+				{ self.focus_node.name_range["start"].line, self.focus_node.name_range["start"].character }
 			)
 		end
 	elseif reorient_method == "mid" then
@@ -335,7 +373,11 @@ end
 function display:show_preview()
 	vim.api.nvim_win_set_buf(self.right.winid, self.for_buf)
 
-	vim.api.nvim_win_set_option(self.right.winid, 'winhighlight', 'Normal:NavbuddyNormalFloat,FloatBorder:NavbuddyFloatBorder')
+	vim.api.nvim_win_set_option(
+		self.right.winid,
+		"winhighlight",
+		"Normal:NavbuddyNormalFloat,FloatBorder:NavbuddyFloatBorder"
+	)
 	vim.api.nvim_win_set_option(self.right.winid, "signcolumn", "no")
 	vim.api.nvim_win_set_option(self.right.winid, "foldlevel", 100)
 	vim.api.nvim_win_set_option(self.right.winid, "wrap", false)

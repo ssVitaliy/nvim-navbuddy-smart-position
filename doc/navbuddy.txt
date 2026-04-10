@@ -114,6 +114,7 @@ Defaults >lua
 								-- starting with the top-left corner. eg: { "╔", "═" ,"╗", "║", "╝", "═", "╚", "║" }.
 			size = "60%",       -- Or table format example: { height = "40%", width = "100%"}
 			position = "50%",   -- Or table format example: { row = "100%", col = "0%"}
+			smart_position = true, --true - will depends on selected pane for a 2-pane vertical split workflow
 			scrolloff = nil,    -- scrolloff value within navbuddy window
 			sections = {
 				left = {
